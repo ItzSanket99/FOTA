@@ -37,6 +37,12 @@ function FirmwareDetailsModal({ firmware, onClose }) {
             <span className="font-mono text-xs">{firmware.fileName}</span>
           </Row>
           <Row label="File Size">{formatFileSize(firmware.fileSize)}</Row>
+          {firmware.sha256 && (
+            <Row label="SHA-256">
+              <span className="break-all font-mono text-xs">{firmware.sha256}</span>
+            </Row>
+          )}
+          <Row label="Upload Date">{formatDate(firmware.uploadDate)}</Row>
           <Row label="Upload Date">{formatDate(firmware.uploadDate)}</Row>
           <Row label="Status">
             <StatusBadge status={firmware.status} />

@@ -1,63 +1,50 @@
-import { mockFirmware, FIRMWARE_STATUS } from '../data/mockFirmware';
+import { USE_MOCK } from './config';
+import { request } from './api';
+import * as mock from './firmwareMock';
 
-// In-memory store, replaced by FastAPI calls once endpoints are agreed with the backend dev.
-// Keep these exported function signatures stable so the UI never changes.
-let store = [...mockFirmware];
+// Backend is snake_case, the UI is camelCase. Mapped once, here.
+const fromApi = (f) => ({
+  id: f.id,
+  version: f.version,
+  targetEcu: f.target_ecu,
+  fileName: f.file_name,
+  fileSize: f.file_size,
+  description: f.description,
+  uploadDate: f.uploaded_at,
+  status: f.status,
+  sha256: f.sha256 ?? null,
+});
 
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export async function getFirmwareList() {
-  await delay();
-  return [...store].sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+async function realList() {
+  return (await request('/firmware')).map(fromApi);
 }
 
-export async function getFirmwareById(id) {
-  await delay(150);
-  const record = store.find((f) => f.id === id);
-  if (!record) throw new Error('Firmware record not found.');
-  return { ...record };
+async function realById(id) {
+  return fromApi(await request(`/firmware/${id}`));
 }
 
-export async function uploadFirmware({ file, version, targetEcu, description }) {
-  await delay(600);
-
-  const cleanVersion = version.trim();
-  const duplicate = store.some(
-    (f) => f.version === cleanVersion && f.targetEcu === targetEcu
-  );
-  if (duplicate) {
-    throw new Error(`Version ${cleanVersion} already exists for ${targetEcu}.`);
-  }
-
-  const record = {
-    id: `fw-${Date.now()}`,
-    version: cleanVersion,
-    targetEcu,
-    fileName: file.name,
-    fileSize: file.size,
-    description: description.trim(),
-    uploadDate: new Date().toISOString(),
-    status: FIRMWARE_STATUS.UPLOADED,
-  };
-  // Real version: send multipart/form-data (file + metadata) to the backend.
-  store = [record, ...store];
-  return { ...record };
+async function realUpload({ file, version, targetEcu, description }) {
+  const body = new FormData();
+  body.append('file', file);
+  body.append('version', version.trim());
+  body.append('target_ecu', targetEcu);
+  body.append('description', description.trim());
+  return fromApi(await request('/firmware', { method: 'POST', body, isForm: true }));
 }
 
-export async function deleteFirmware(id) {
-  await delay(300);
-  const record = store.find((f) => f.id === id);
-  if (!record) throw new Error('Firmware record not found.');
-  if (record.status === FIRMWARE_STATUS.RELEASED) {
-    throw new Error('Released firmware cannot be deleted.');
-  }
-  store = store.filter((f) => f.id !== id);
+async function realDelete(id) {
+  await request(`/firmware/${id}`, { method: 'DELETE' });
   return true;
 }
 
-export async function markFirmwareReleased(id) {
-  const record = store.find((f) => f.id === id);
-  if (!record) throw new Error('Firmware record not found.');
-  record.status = FIRMWARE_STATUS.RELEASED;
-  return { ...record };
+// TEMPORARY: the mock release flow still calls this. In real mode the backend
+// will own the status change in Step 4, so this is a no-op until then.
+async function realMarkReleased(id) {
+  return realById(id);
 }
+
+export const getFirmwareList = USE_MOCK ? mock.getFirmwareList : realList;
+export const getFirmwareById = USE_MOCK ? mock.getFirmwareById : realById;
+export const uploadFirmware = USE_MOCK ? mock.uploadFirmware : realUpload;
+export const deleteFirmware = USE_MOCK ? mock.deleteFirmware : realDelete;
+export const markFirmwareReleased = USE_MOCK ? mock.markFirmwareReleased : realMarkReleased;
