@@ -1,15 +1,23 @@
-import { mockVehicles } from '../data/mockVehicles';
+import { USE_MOCK } from './config';
+import { request } from './api';
+import * as mock from './vehicleMock';
 
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+const fromApi = (v) => ({
+  id: v.id,
+  name: v.name,
+  group: v.group,
+  registrationStatus: v.registration_status,
+  gatewayStatus: v.gateway_status,
+  ecus: (v.ecus || []).map((e) => ({ name: e.name, firmwareVersion: e.firmware_version })),
+});
 
-export async function getVehicles() {
-  await delay();
-  return mockVehicles.map((v) => ({ ...v, ecus: v.ecus.map((e) => ({ ...e })) }));
+async function realList() {
+  return (await request('/vehicles')).map(fromApi);
 }
 
-export async function getVehicleById(id) {
-  await delay(150);
-  const vehicle = mockVehicles.find((v) => v.id === id);
-  if (!vehicle) throw new Error('Vehicle not found.');
-  return { ...vehicle };
+async function realById(id) {
+  return fromApi(await request(`/vehicles/${id}`));
 }
+
+export const getVehicles = USE_MOCK ? mock.getVehicles : realList;
+export const getVehicleById = USE_MOCK ? mock.getVehicleById : realById;

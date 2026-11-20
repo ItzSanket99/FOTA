@@ -1,46 +1,30 @@
-import { getFirmwareById, markFirmwareReleased } from './firmwareService';
-import { getVehicles } from './vehicleService';
-import { getEligibleVehicles } from '../utils/releaseUtils';
+import { USE_MOCK } from './config';
+import { request } from './api';
+import * as mock from './releaseMock';
 
-// In-memory store. Real version: POST to FastAPI, which stores the release
-// and publishes the MQTT notification to each target gateway.
-let releases = [];
+const fromApi = (r) => ({
+  id: r.id,
+  firmwareId: r.firmware_id,
+  version: r.version,
+  targetEcu: r.target_ecu,
+  vehicleIds: r.vehicle_ids,
+  createdAt: r.created_at,
+  status: r.status,
+  failedVehicleIds: r.failed_vehicle_ids || [],
+});
 
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export async function getReleases() {
-  await delay(200);
-  return [...releases].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+async function realList() {
+  return (await request('/releases')).map(fromApi);
 }
 
-export async function createRelease({ firmwareId, vehicleIds }) {
-  await delay(700);
-
-  if (!vehicleIds || vehicleIds.length === 0) {
-    throw new Error('Select at least one vehicle.');
-  }
-
-  const firmware = await getFirmwareById(firmwareId);
-  const vehicles = await getVehicles();
-  const eligible = getEligibleVehicles(vehicles, firmware);
-
-  // Re-validate here so the rule holds even if the UI is bypassed.
-  for (const id of vehicleIds) {
-    const v = eligible.find((x) => x.id === id);
-    if (!v) throw new Error(`Vehicle ${id} not found.`);
-    if (v.reason) throw new Error(`${id} is not eligible: ${v.reason}.`);
-  }
-
-  const release = {
-    id: `rel-${Date.now()}`,
-    firmwareId: firmware.id,
-    version: firmware.version,
-    targetEcu: firmware.targetEcu,
-    vehicleIds: [...vehicleIds],
-    createdAt: new Date().toISOString(),
-    status: 'Pending',
-  };
-  releases = [release, ...releases];
-  await markFirmwareReleased(firmware.id);
-  return { ...release };
+// Backend validates eligibility, marks firmware Released and publishes MQTT.
+async function realCreate({ firmwareId, vehicleIds }) {
+  const r = await request('/releases', {
+    method: 'POST',
+    body: { firmware_id: firmwareId, vehicle_ids: vehicleIds },
+  });
+  return fromApi(r);
 }
+
+export const getReleases = USE_MOCK ? mock.getReleases : realList;
+export const createRelease = USE_MOCK ? mock.createRelease : realCreate;

@@ -48,8 +48,12 @@ function Release() {
         firmwareId: review.firmware.id,
         vehicleIds: review.vehicles.map((v) => v.id),
       });
+      const failed = release.failedVehicleIds || [];
       setSuccess(
-        `Release published: ${release.targetEcu} v${release.version} to ${release.vehicleIds.length} vehicle(s).`
+        `Release published: ${release.targetEcu} v${release.version} to ${
+          release.vehicleIds.length - failed.length
+        } vehicle(s).` +
+          (failed.length ? ` Notification failed for: ${failed.join(', ')}.` : '')
       );
       setReview(null);
       setFormKey((k) => k + 1);
